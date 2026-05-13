@@ -1,0 +1,70 @@
+name: 'Wallet Risk Analyzer'
+description: 'Generate on-chain risk audit reports for Ethereum addresses. Uses public RPC endpoints — no API keys required.'
+author: 'FlowForge AI Ops'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  address:
+    description: 'Ethereum address to audit (0x... format)'
+    required: true
+  output-format:
+    description: 'Output format: html, json, or both'
+    required: false
+    default: 'both'
+
+outputs:
+  balance-eth:
+    description: 'Wallet balance in ETH'
+  balance-usd:
+    description: 'Wallet balance in USD'
+  risk-count:
+    description: 'Number of risks detected'
+  report-path:
+    description: 'Path to generated HTML report'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      shell: bash
+      run: |
+        if ! command -v python3 &> /dev/null; then
+          echo "Python 3 is required but not found."
+          exit 1
+        fi
+
+    - name: Run Wallet Risk Analyzer
+      shell: bash
+      id: analyze
+      run: |
+        chmod +x ${{ github.action_path }}/scripts/wallet_risk_analyzer.py
+        python3 ${{ github.action_path }}/scripts/wallet_risk_analyzer.py "${{ inputs.address }}" --output-dir "${{ github.workspace }}/wallet-audit"
+        
+        # Extract outputs from JSON
+        JSON_FILE=$(ls -t "${{ github.workspace }}/wallet-audit"/audit_*.json 2>/dev/null | head -1)
+        if [ -f "$JSON_FILE" ]; then
+          BALANCE_ETH=$(python3 -c "import json; d=json.load(open('$JSON_FILE')); print(d['balance_eth'])")
+          BALANCE_USD=$(python3 -c "import json; d=json.load(open('$JSON_FILE')); print(d['balance_usd'])")
+          RISK_COUNT=$(python3 -c "import json; d=json.load(open('$JSON_FILE')); print(len(d.get('risks', [])))")
+          HTML_FILE=$(ls -t "${{ github.workspace }}/wallet-audit"/audit_*.html 2>/dev/null | head -1)
+          
+          echo "balance-eth=$BALANCE_ETH" >> "$GITHUB_OUTPUT"
+          echo "balance-usd=$BALANCE_USD" >> "$GITHUB_OUTPUT"
+          echo "risk-count=$RISK_COUNT" >> "$GITHUB_OUTPUT"
+          echo "report-path=$HTML_FILE" >> "$GITHUB_OUTPUT"
+          
+          echo "✅ Audit complete: $BALANCE_ETH ETH, $RISK_COUNT risks"
+        else
+          echo "❌ Audit failed — no output generated"
+          exit 1
+        fi
+
+    - name: Upload Report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: wallet-risk-report
+        path: ${{ github.workspace }}/wallet-audit/
+        retention-days: 30

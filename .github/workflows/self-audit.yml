@@ -1,0 +1,24 @@
+name: Self Audit (Dogfooding)
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 12 * * 1'  # Weekly on Monday at noon UTC
+
+jobs:
+  audit-vitalik:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Audit Vitalik's Address
+        id: audit
+        uses: ./
+        with:
+          address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'
+
+      - name: Print Results
+        run: |
+          echo "Balance: ${{ steps.audit.outputs.balance-eth }} ETH"
+          echo "Risks: ${{ steps.audit.outputs.risk-count }}"
+          echo "Report: ${{ steps.audit.outputs.report-path }}"
